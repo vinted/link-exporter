@@ -1,0 +1,10 @@
+project_name: link-exporter
+builds:
+  - env: [CGO_ENABLED=0]
+    goos:
+      - linux
+    goarch:
+      - amd64
+    id: "link-exporter"
+    dir: .
+    main: ./cmd/link-exporter
