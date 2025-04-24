@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"os"
 	"sync"
+	"time"
 
 	"github.com/vinted/link-exporter/internal/config"
 )
@@ -14,40 +14,55 @@ func Start() {
 
 	var wg sync.WaitGroup
 	for _, iface := range config.Config.Interfaces {
-		var ipv6Addr net.IP
-		ief, err := net.InterfaceByName(iface)
-		if err != nil {
-			slog.Error(fmt.Sprintf("%s \n", err))
-		}
-		addrs, err := ief.Addrs()
-		if err != nil {
-			slog.Error(fmt.Sprintf("%s \n", err))
-		}
-		for _, addr := range addrs {
-			if addr.(*net.IPNet).IP.IsLinkLocalUnicast() == false {
-				continue
-			}
-			ipv6Addr = addr.(*net.IPNet).IP
-			break
-		}
-
-		if ipv6Addr == nil {
-			slog.Error(fmt.Sprintf("Interface %s don't have an link-local address\n", iface))
-		}
-
+		ipv6Addr, _ := getInterfaceIP(iface)
 		wg.Add(1)
 		go startServer(ipv6Addr.String(), iface, &wg)
 	}
 	wg.Wait()
 }
 
-func startServer(ipv6Addr string, iface string, wg *sync.WaitGroup) {
-	defer wg.Done()
-	udpAddr, err := net.ResolveUDPAddr("udp6", "["+ipv6Addr+"%"+iface+"]:"+config.Config.MonitorPort)
-
+func getInterfaceIP(iface string) (net.IP, error) {
+	var ipv6Addr net.IP
+	ief, err := net.InterfaceByName(iface)
 	if err != nil {
 		slog.Error(fmt.Sprintf("%s \n", err))
-		os.Exit(1)
+	}
+	addrs, err := ief.Addrs()
+	if err != nil {
+		slog.Error(fmt.Sprintf("%s \n", err))
+	}
+	for _, addr := range addrs {
+		if addr.(*net.IPNet).IP.IsLinkLocalUnicast() == false {
+			continue
+		}
+		ipv6Addr = addr.(*net.IPNet).IP
+		break
+	}
+
+	if ipv6Addr == nil {
+		slog.Error(fmt.Sprintf("Interface %s don't have an link-local address", iface))
+		return nil, fmt.Errorf("Interface has no link-local address")
+	}
+	return ipv6Addr, nil
+}
+func startServer(ipv6Addr string, iface string, wg *sync.WaitGroup) {
+	hb, _ := time.ParseDuration(config.Config.HeartBeatInterval)
+	var udpAddr *net.UDPAddr
+	var err error
+	defer wg.Done()
+	for {
+		udpAddr, err = net.ResolveUDPAddr("udp6", "["+ipv6Addr+"%"+iface+"]:"+config.Config.MonitorPort)
+		if err != nil {
+			slog.Debug(fmt.Sprintf("Interface is not available: %s", err))
+			time.Sleep(hb)
+			ip, err := getInterfaceIP(iface)
+			if err == nil {
+				ipv6Addr = ip.String()
+				time.Sleep(5 * time.Second)
+			}
+		} else {
+			break
+		}
 	}
 
 	l, err := net.ListenUDP("udp6", udpAddr)
