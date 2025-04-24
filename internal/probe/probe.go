@@ -14,9 +14,9 @@ import (
 )
 
 func Start() {
-	neighbors := ip_neighbor.ListNeighbors()
 	hb, _ := time.ParseDuration(config.Config.HeartBeatInterval)
 	for {
+		neighbors := ip_neighbor.ListNeighbors()
 		for _, iface := range config.Config.Interfaces {
 			for _, neigh := range neighbors {
 				if neigh.InterfaceName == iface {
