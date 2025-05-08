@@ -69,7 +69,7 @@ func startServer(ipv6Addr string, iface string, wg *sync.WaitGroup) {
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error listening:", err.Error()))
 	}
-	slog.Info(fmt.Sprintf("Started udp reflector on %s:%s", ipv6Addr, config.Config.MonitorPort))
+	slog.Info(fmt.Sprintf("Started UDP reflector on %s:%s", ipv6Addr, config.Config.MonitorPort))
 	defer l.Close()
 	for {
 		buf := make([]byte, 19)

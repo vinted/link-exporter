@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/vinted/link-exporter/internal/config"
@@ -29,13 +30,16 @@ func Start() {
 }
 
 func heartBeat(ifname string, neigh_ip netip.Addr) {
+	var wg sync.WaitGroup
 	udpAddr := "[" + neigh_ip.String() + "%" + ifname + "]:" + config.Config.MonitorPort
 	conn, err := net.Dial("udp6", udpAddr)
 	if err != nil {
 		slog.Error(fmt.Sprintf("Error creating UDP connection on port %s error: %v", ifname, err))
 		return
 	}
-	go getReply(conn, ifname)
+	wg.Add(1)
+	go getReply(conn, ifname, &wg)
+	wg.Wait()
 	bs := make([]byte, 8)
 	nsec := time.Now().UnixNano()
 	binary.LittleEndian.PutUint64(bs, uint64(nsec))
@@ -43,11 +47,12 @@ func heartBeat(ifname string, neigh_ip netip.Addr) {
 	slog.Debug("heartBeat sent")
 }
 
-func getReply(conn net.Conn, ifname string) {
+func getReply(conn net.Conn, ifname string, wg *sync.WaitGroup) {
 	deadline, _ := time.ParseDuration(config.Config.HeartBeatTimeout)
 	defer conn.Close()
 	conn.SetReadDeadline(time.Now().Add(deadline))
-	reply := make([]byte, 19)
+	reply := make([]byte, 8)
+	wg.Done()
 	_, err := conn.Read(reply)
 	reply_nsec := time.Now().UnixNano()
 	latency := 0.0
